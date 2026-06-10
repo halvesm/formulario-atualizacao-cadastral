@@ -29,7 +29,7 @@ if (isMockConfig && config) {
 
 const dbId = (config as any).firestoreDatabaseId && (config as any).firestoreDatabaseId.trim() !== ""
   ? (config as any).firestoreDatabaseId.trim()
-  : "sige-cadastral";
+  : "atualizacao-cadastral-escolar-2026";
 
 let app: any;
 let db: any;

@@ -2,11 +2,11 @@ rules_version = '2';
 
 // ============================================================
 // REGRAS DE SEGURANÇA DO FIRESTORE - SIGE Atualização Cadastral
-// Database ID: sige-cadastral
+// Database ID: atualizacao-cadastral-escolar-2026
 // ============================================================
 // INSTRUÇÕES DE APLICAÇÃO:
 // 1. Acesse: console.firebase.google.com → Projeto steel-life-41f5t
-// 2. Vá em: Firestore Database → Selecione o database "sige-cadastral"
+// 2. Vá em: Firestore Database → Selecione o database "atualizacao-cadastral-escolar-2026"
 // 3. Clique em: "Rules" (Regras)
 // 4. Cole o conteúdo abaixo e clique em "Publish" (Publicar)
 // ============================================================

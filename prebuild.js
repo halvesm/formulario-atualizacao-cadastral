@@ -13,7 +13,7 @@ const envConfig = {
   appId: process.env.VITE_FIREBASE_APP_ID || process.env.FIREBASE_APP_ID,
   apiKey: process.env.VITE_FIREBASE_API_KEY || process.env.FIREBASE_API_KEY,
   authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || process.env.FIREBASE_AUTH_DOMAIN,
-  firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "sige-cadastral",
+  firestoreDatabaseId: process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "atualizacao-cadastral-escolar-2026",
   storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || process.env.FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || process.env.FIREBASE_MESSAGING_SENDER_ID,
   measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID || process.env.FIREBASE_MEASUREMENT_ID || ""
@@ -32,7 +32,7 @@ if (hasEnvCredentials) {
     "appId": "1:776918370297:web:3917bc8eba0060fdcc1f28",
     "apiKey": "AIzaSyDXHz8ornQIS45mijVzv3hqTXeJ7w8nk5g",
     "authDomain": "steel-life-41f5t.firebaseapp.com",
-    "firestoreDatabaseId": "sige-cadastral",
+    "firestoreDatabaseId": "atualizacao-cadastral-escolar-2026",
     "storageBucket": "steel-life-41f5t.firebasestorage.app",
     "messagingSenderId": "776918370297",
     "measurementId": ""
@@ -40,5 +40,13 @@ if (hasEnvCredentials) {
   fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf-8');
   console.log("Prebuild: Created default 'firebase-applet-config.json' with active project keys.");
 } else {
-  console.log("Prebuild: firebase-applet-config.json already exists.");
+  // Overwrite local config database ID to apply the new ID immediately for developer testing
+  try {
+    const existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    existing.firestoreDatabaseId = "atualizacao-cadastral-escolar-2026";
+    fs.writeFileSync(configPath, JSON.stringify(existing, null, 2), 'utf-8');
+    console.log("Prebuild: Updated existing config database ID to 'atualizacao-cadastral-escolar-2026'.");
+  } catch (e) {
+    console.error("Failed to update config ID in existing file:", e);
+  }
 }
