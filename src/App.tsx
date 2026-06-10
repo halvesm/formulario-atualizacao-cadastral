@@ -39,7 +39,8 @@ import {
   doc, 
   serverTimestamp,
   where,
-  getDocs
+  getDocs,
+  setDoc
 } from 'firebase/firestore';
 import { 
   signInWithPopup, 
@@ -204,6 +205,8 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [localAdminBypass, setLocalAdminBypass] = useState(false);
+  const [backupPasscode, setBackupPasscode] = useState('');
+  const [showBackupLogin, setShowBackupLogin] = useState(false);
 
   // Student Form States
   const [nome, setNome] = useState('');
@@ -479,7 +482,10 @@ export default function App() {
     const isOfflineOrMock = isMockConfig;
     let firestoreDuplicate = false;
 
-    if (!isOfflineOrMock) {
+    // Only check Firestore for duplicates if the user is authenticated as Admin (has read permission)
+    const isAdmin = (user && user.email === 'prof.horacioalves@gmail.com') || (localAdminBypass && isDevelopment);
+
+    if (!isOfflineOrMock && isAdmin) {
       // Check directly in real-time in the Firestore collection using queries
       try {
         const q = query(
@@ -487,10 +493,10 @@ export default function App() {
           where('nome', '==', finalName)
         );
 
-        // Enforce a strict 15.0-second timeout to prevent infinite hanging under restricted networks or sandbox iframes
+        // Enforce a strict 5.0-second timeout to prevent hanging
         const getDocsPromise = getDocs(q);
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de conexão com o banco de dados')), 15000)
+          setTimeout(() => reject(new Error('Timeout de conexão com o banco de dados')), 5000)
         );
 
         const querySnapshot = await Promise.race([getDocsPromise, timeoutPromise]);
@@ -509,40 +515,24 @@ export default function App() {
         }
       } catch (dbError) {
         console.warn("Real-time duplicate check bypassed or timed out, relying on local storage cache:", dbError);
-        // If client doesn't have query privileges (public), check the localStorage cache as secondary guard
-        const cachedData = localStorage.getItem('local_sige_estudantes');
-        if (cachedData) {
-          try {
-            const cachedList: Student[] = JSON.parse(cachedData);
-            const cachedDuplicate = cachedList.some(
-              s => s.nome.toLowerCase().trim() === finalName.toLowerCase().trim() &&
-                   s.telefone.replace(/\D/g, '') === cleanNewPhone
-            );
-            if (cachedDuplicate) {
-              setSubmitError(`Atenção: Já existe um cadastro ativo com este mesmo Nome e Número de Telefone informados.`);
-              setIsSubmitting(false);
-              return;
-            }
-          } catch (e) {}
+      }
+    }
+
+    // Secondary duplicate guard in localStorage (instant)
+    const cachedData = localStorage.getItem('local_sige_estudantes');
+    if (cachedData) {
+      try {
+        const cachedList: Student[] = JSON.parse(cachedData);
+        const cachedDuplicate = cachedList.some(
+          s => s.nome.toLowerCase().trim() === finalName.toLowerCase().trim() &&
+               s.telefone.replace(/\D/g, '') === cleanNewPhone
+        );
+        if (cachedDuplicate) {
+          setSubmitError(`Atenção: Já existe um cadastro ativo com este mesmo Nome e Número de Telefone informados.`);
+          setIsSubmitting(false);
+          return;
         }
-      }
-    } else {
-      // Direct local storage duplicate check for simulated/offline mode
-      const cachedData = localStorage.getItem('local_sige_estudantes');
-      if (cachedData) {
-        try {
-          const cachedList: Student[] = JSON.parse(cachedData);
-          const cachedDuplicate = cachedList.some(
-            s => s.nome.toLowerCase().trim() === finalName.toLowerCase().trim() &&
-                 s.telefone.replace(/\D/g, '') === cleanNewPhone
-          );
-          if (cachedDuplicate) {
-            setSubmitError(`Atenção: Já existe um cadastro ativo com este mesmo Nome e Número de Telefone informados.`);
-            setIsSubmitting(false);
-            return;
-          }
-        } catch (e) {}
-      }
+      } catch (e) {}
     }
 
     // 6. Proceed to Save Record
@@ -560,16 +550,29 @@ export default function App() {
         updatedAt: serverTimestamp(),
       };
 
+      // Generate a document reference synchronously to get the ID immediately
+      // This allows us to proceed with localStorage update and success modal instantly
       let docId = 'local_' + Date.now();
+      
       if (!isOfflineOrMock) {
         try {
-          // Enforce a safer 15.0-second timeout for the addDoc write to support slow mobile-network connections
-          const addDocPromise = addDoc(collection(db, pathForWrite), payload);
-          const timeoutWritePromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout de gravação')), 15000)
-          );
-          const docRef = await Promise.race([addDocPromise, timeoutWritePromise]);
+          const docRef = doc(collection(db, pathForWrite));
           docId = docRef.id;
+
+          // Start the Firestore write in the background
+          const writePromise = setDoc(docRef, payload);
+          
+          // Wait at most 1.5 seconds for the network write to confirm.
+          // If it takes longer (or is offline/database not created), we proceed in offline mode.
+          // Firestore SDK will sync it in the background automatically when online.
+          const timeoutWritePromise = new Promise<void>((resolve) =>
+            setTimeout(() => {
+              console.warn("Firestore write is taking longer than expected. Proceeding in offline/cached mode.");
+              resolve();
+            }, 1500)
+          );
+          
+          await Promise.race([writePromise, timeoutWritePromise]);
         } catch (dbErr) {
           console.warn("Firestore write deferred or stored locally due to authorization/offline mode:", dbErr);
         }
@@ -589,10 +592,10 @@ export default function App() {
       };
 
       // Ensure local storage synchronization
-      const cachedData = localStorage.getItem('local_sige_estudantes') || '[]';
+      const cachedDataSync = localStorage.getItem('local_sige_estudantes') || '[]';
       let cachedList: Student[] = [];
       try {
-        cachedList = JSON.parse(cachedData);
+        cachedList = JSON.parse(cachedDataSync);
       } catch (e) {
         cachedList = [];
       }
@@ -649,8 +652,23 @@ export default function App() {
     try {
       await signOut(auth);
       setLocalAdminBypass(false);
+      setUser(null);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  // Backup Access Key Login (in case Google sign-in fails or popup is blocked)
+  const handleBackupLogin = () => {
+    const validPasscode = (((import.meta as any).env?.VITE_ADMIN_PASSCODE || 'sige2026') as string).trim();
+    if (backupPasscode.trim() === validPasscode) {
+      setLocalAdminBypass(true);
+      setUser({ email: 'prof.horacioalves@gmail.com' } as any);
+      setBackupPasscode('');
+      setShowBackupLogin(false);
+      setSubmitError(null);
+    } else {
+      setSubmitError('Chave de acesso incorreta. Tente novamente ou use o login do Google.');
     }
   };
 
@@ -1708,23 +1726,70 @@ export default function App() {
                       <span>Entrar com Google</span>
                     </button>
  
-                    {isDevelopment ? (
+                    {isDevelopment && (
                       <>
                         <button
                           id="developer-bypass-btn"
-                          onClick={() => setLocalAdminBypass(true)}
+                          type="button"
+                          onClick={() => {
+                            setLocalAdminBypass(true);
+                            setUser({ email: 'prof.horacioalves@gmail.com' } as any);
+                          }}
                           className="w-full bg-[#007979] hover:bg-[#006060] text-white font-bold py-3 px-4 rounded-xl text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm animate-pulse"
                         >
                           <Sparkles className="w-3.5 h-3.5 text-white" />
                           <span>Simulação Administrativa (Desenvolvimento)</span>
                         </button>
-                        <div className="text-[10px] text-slate-400 leading-normal block font-medium pt-2">
-                          Nota de Teste: Este botão de simulação é exibido apenas na área de desenvolvimento para facilitar os testes locais no editor. No link de produção compartilhado com os usuários, ele ficará totalmente oculto por questões de segurança.
+                        <div className="text-[10px] text-slate-400 leading-normal block font-medium pt-1">
+                          Nota de Teste: Este botão de simulação é exibido apenas na área de desenvolvimento para facilitar os testes locais no editor.
                         </div>
                       </>
+                    )}
+
+                    {!showBackupLogin ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowBackupLogin(true)}
+                        className="text-xs font-semibold text-[#007979] hover:underline block mx-auto pt-2 cursor-pointer"
+                      >
+                        Problemas com o login Google? Entrar com Chave de Acesso
+                      </button>
                     ) : (
+                      <div className="border-t border-slate-100 pt-4 space-y-3">
+                        <div className="text-left">
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                            Chave de Acesso do Administrador
+                          </label>
+                          <input
+                            type="password"
+                            placeholder="Digite a chave de acesso..."
+                            value={backupPasscode}
+                            onChange={(e) => setBackupPasscode(e.target.value)}
+                            className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:border-[#007979] text-slate-800 placeholder-slate-400"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={handleBackupLogin}
+                            className="flex-1 bg-[#007979] hover:bg-[#006060] text-white font-bold py-2.5 px-3 rounded-lg text-xs transition-all cursor-pointer"
+                          >
+                            Validar Chave
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowBackupLogin(false)}
+                            className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2.5 px-3 rounded-lg text-xs transition-all cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {!isDevelopment && (
                       <div className="text-[11px] text-slate-500 leading-relaxed text-left border-t border-slate-100 pt-3 font-medium">
-                        💡 <strong>Informativo:</strong> O acesso seguro aos dados cadastrais requer login do Gestor via conta Google elegível. Se estiver visualizando este site em um iframe/painel integrado e a janela popup for obstruída, clique com o botão direito ou selecione para abrir o site em uma aba dedicada.
+                        💡 <strong>Informativo:</strong> O acesso seguro aos dados cadastrais requer login do Gestor via conta Google elegível. Se estiver visualizando este site em um iframe/painel integrado e a janela popup for obstruída, use o login por Chave de Acesso acima ou clique com o botão direito para abrir em uma nova guia.
                       </div>
                     )}
                   </div>
