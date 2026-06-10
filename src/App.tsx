@@ -241,6 +241,8 @@ export default function App() {
   const [editEmail, setEditEmail] = useState('');
   const [editTelefone, setEditTelefone] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [studentToDelete, setStudentToDelete] = useState<Student | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Specific reports states
   const [selectedClassReport, setSelectedClassReport] = useState('');
@@ -748,9 +750,21 @@ export default function App() {
     }
   };
 
-  // Delete student
-  const handleDeleteStudent = async (id: string) => {
-    if (!window.confirm('Tem certeza de que deseja permanentemente excluir este registro estudantil?')) return;
+  // Trigger custom delete modal
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const startDeleting = (student: Student) => {
+    setStudentToDelete(student);
+    setDeleteError(null);
+  };
+
+  // Perform custom deletion
+  const confirmDeleteStudent = async () => {
+    if (!studentToDelete?.id) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    const id = studentToDelete.id;
+
     try {
       if (id.startsWith('local_')) {
         const cachedData = localStorage.getItem('local_sige_estudantes');
@@ -763,9 +777,12 @@ export default function App() {
       } else {
         await deleteDoc(doc(db, 'estudantes', id));
       }
+      setStudentToDelete(null);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
-      alert('Erro ao excluir registro.');
+      setDeleteError('Erro ao excluir registro. Verifique a conexão e permissões.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -2168,7 +2185,7 @@ export default function App() {
                                     <Edit className="w-3.5 h-3.5" />
                                   </button>
                                   <button
-                                    onClick={() => student.id && handleDeleteStudent(student.id)}
+                                    onClick={() => startDeleting(student)}
                                     className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 hover:border-rose-100 rounded-lg border border-transparent transition-all cursor-pointer"
                                     title="Excluir Estudante"
                                   >
@@ -2312,6 +2329,79 @@ export default function App() {
                     </div>
 
                   </form>
+
+                </div>
+              </div>
+            )}
+
+            {/* CUSTOM MODAL WINDOW FOR DELETE CONFIRMATION */}
+            {studentToDelete && (
+              <div id="delete-student-modal-wrapper" className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-50 p-4 transition-all duration-300">
+                <div className="bg-white/95 backdrop-blur-md border border-slate-200/60 max-w-md w-full overflow-hidden shadow-2xl rounded-2xl flex flex-col animate-in fade-in zoom-in-95 duration-200">
+                  
+                  {/* Header */}
+                  <div className="bg-rose-50 border-b border-rose-100/40 p-4 px-6 flex items-center gap-3">
+                    <div className="h-9 w-9 bg-rose-100 text-rose-600 flex items-center justify-center rounded-xl shrink-0 shadow-sm">
+                      <Trash2 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-rose-950 font-display">
+                        Confirmar Exclusão
+                      </h3>
+                      <p className="text-[10px] text-rose-700/70 font-medium font-sans">
+                        Ação crítica e irreversível
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-6 space-y-4">
+                    <p className="text-xs text-slate-600 leading-relaxed font-medium">
+                      Tem certeza de que deseja permanentemente excluir o registro cadastral do estudante:
+                    </p>
+                    
+                    <div className="bg-slate-50 border border-slate-200/50 p-4 rounded-xl space-y-1">
+                      <div className="text-xs font-bold text-slate-800">{studentToDelete.nome}</div>
+                      <div className="text-[10px] text-slate-400 font-semibold uppercase font-sans">
+                        {studentToDelete.turma}
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] text-rose-600 font-semibold bg-rose-50/50 border border-rose-100/30 p-3 rounded-lg flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>
+                        Atenção: Ao excluir este registro, os dados serão removidos permanentemente do banco de dados e os relatórios consolidados do SIGE serão recalculados.
+                      </span>
+                    </p>
+
+                    {deleteError && (
+                      <div className="text-[11px] text-rose-700 font-bold bg-rose-100/50 border border-rose-200 p-2.5 rounded-lg flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4" />
+                        <span>{deleteError}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer buttons */}
+                  <div className="flex gap-2 justify-end p-4 px-6 bg-slate-50 border-t border-slate-100">
+                    <button
+                      type="button"
+                      disabled={isDeleting}
+                      onClick={() => setStudentToDelete(null)}
+                      className="px-4 py-2 bg-white hover:bg-slate-50 disabled:bg-slate-50 text-slate-600 border border-slate-200 rounded-xl text-xs font-semibold shadow-sm transition-all cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeleting}
+                      onClick={confirmDeleteStudent}
+                      className="px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-200 text-white font-semibold rounded-xl text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow-md"
+                    >
+                      {isDeleting && <div className="w-3.5 h-3.5 rounded-full border-2 border-white/20 border-t-white animate-spin"></div>}
+                      <span>Excluir Permanentemente</span>
+                    </button>
+                  </div>
 
                 </div>
               </div>
