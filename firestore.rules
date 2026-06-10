@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// ============================================================
+// REGRAS DE SEGURANÇA DO FIRESTORE - SIGE Atualização Cadastral
+// Database ID: sige-cadastral
+// ============================================================
+// INSTRUÇÕES DE APLICAÇÃO:
+// 1. Acesse: console.firebase.google.com → Projeto steel-life-41f5t
+// 2. Vá em: Firestore Database → Selecione o database "sige-cadastral"
+// 3. Clique em: "Rules" (Regras)
+// 4. Cole o conteúdo abaixo e clique em "Publish" (Publicar)
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Coleção de estudantes cadastrados
+    match /estudantes/{studentId} {
+
+      // ESCRITA PÚBLICA: Qualquer pessoa pode criar um novo registro
+      // (formulário público - não requer autenticação)
+      allow create: if true;
+
+      // LEITURA RESTRITA: Apenas o administrador autenticado pode ler
+      allow read: if request.auth != null
+        && request.auth.token.email == 'prof.horacioalves@gmail.com';
+
+      // EDIÇÃO RESTRITA: Apenas o administrador pode atualizar registros
+      allow update: if request.auth != null
+        && request.auth.token.email == 'prof.horacioalves@gmail.com';
+
+      // EXCLUSÃO RESTRITA: Apenas o administrador pode deletar registros
+      allow delete: if request.auth != null
+        && request.auth.token.email == 'prof.horacioalves@gmail.com';
+    }
+
+    // Coleção de teste de conexão (permite leitura para health check)
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // Bloquear acesso a qualquer outra coleção por padrão
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

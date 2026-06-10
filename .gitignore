@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.local
+firebase-applet-config.json
+DRAFT_firestore.rules
+security_spec.md
+firebase-blueprint.json
+.vercel

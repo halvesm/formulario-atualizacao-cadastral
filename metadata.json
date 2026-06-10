@@ -1,0 +1,6 @@
+{
+  "name": "Atualização Cadastral de Estudantes",
+  "description": "Formulário de preenchimento cadastral de estudantes integrado ao banco de dados Firebase. Oferece painel de gestão para diretores e exportação de relatórios em PDF e Word editável (.DOC) por estudante, turma ou toda a escola.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
