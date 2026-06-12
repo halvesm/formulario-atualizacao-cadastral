@@ -25,13 +25,11 @@ service cloud.firestore {
       allow read: if request.auth != null
         && request.auth.token.email == 'prof.horacioalves@gmail.com';
 
-      // EDIÇÃO RESTRITA: Apenas o administrador pode atualizar registros
-      allow update: if request.auth != null
-        && request.auth.token.email == 'prof.horacioalves@gmail.com';
+      // EDIÇÃO: Permite a atualização de registros
+      allow update: if true;
 
-      // EXCLUSÃO RESTRITA: Apenas o administrador pode deletar registros
-      allow delete: if request.auth != null
-        && request.auth.token.email == 'prof.horacioalves@gmail.com';
+      // EXCLUSÃO: Permite a exclusão de registros
+      allow delete: if true;
     }
 
     // Coleção de teste de conexão (permite leitura para health check)

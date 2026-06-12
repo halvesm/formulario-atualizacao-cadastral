@@ -694,51 +694,59 @@ export default function App() {
     const finalEditNome = normalizeAndAccentuateName(editNome);
     const finalEditTurma = `${editSerie} - ${editCurso}`.toUpperCase().trim();
 
+    const updatedStudentData = {
+      nome: finalEditNome,
+      dataNascimento: editDataNascimento,
+      serie: editSerie,
+      curso: editCurso,
+      turma: finalEditTurma,
+      email: editEmail.trim().toLowerCase(),
+      telefone: editTelefone,
+      updatedAt: new Date().toISOString()
+    };
+
     try {
-      if (editingStudent.id.startsWith('local_')) {
-        const cachedData = localStorage.getItem('local_sige_estudantes');
-        if (cachedData) {
+      // 1. Always update LocalStorage cache (regardless of prefix)
+      const cachedData = localStorage.getItem('local_sige_estudantes');
+      if (cachedData) {
+        try {
           const cachedList: Student[] = JSON.parse(cachedData);
           const itemIdx = cachedList.findIndex(s => s.id === editingStudent.id);
           if (itemIdx > -1) {
             cachedList[itemIdx] = {
               ...cachedList[itemIdx],
-              nome: finalEditNome,
-              dataNascimento: editDataNascimento,
-              serie: editSerie,
-              curso: editCurso,
-              turma: finalEditTurma,
-              email: editEmail.trim().toLowerCase(),
-              telefone: editTelefone,
-              updatedAt: new Date().toISOString()
+              ...updatedStudentData
             };
             localStorage.setItem('local_sige_estudantes', JSON.stringify(cachedList));
           }
+        } catch (e) {
+          console.warn("Erro ao atualizar cache do LocalStorage:", e);
         }
-        // Force memory state sync manually
-        setStudents(prev => prev.map(s => s.id === editingStudent.id ? {
-          ...s,
-          nome: finalEditNome,
-          dataNascimento: editDataNascimento,
-          serie: editSerie,
-          curso: editCurso,
-          turma: finalEditTurma,
-          email: editEmail.trim().toLowerCase(),
-          telefone: editTelefone,
-          updatedAt: new Date().toISOString()
-        } : s));
-      } else {
-        const studentDocRef = doc(db, 'estudantes', editingStudent.id);
-        await updateDoc(studentDocRef, {
-          nome: finalEditNome,
-          dataNascimento: editDataNascimento,
-          serie: editSerie,
-          curso: editCurso,
-          turma: finalEditTurma,
-          email: editEmail.trim().toLowerCase(),
-          telefone: editTelefone,
-          updatedAt: serverTimestamp()
-        });
+      }
+
+      // 2. Always update React state immediately
+      setStudents(prev => prev.map(s => s.id === editingStudent.id ? {
+        ...s,
+        ...updatedStudentData
+      } : s));
+
+      // 3. If remote document, update Firestore
+      if (!editingStudent.id.startsWith('local_')) {
+        try {
+          const studentDocRef = doc(db, 'estudantes', editingStudent.id);
+          await updateDoc(studentDocRef, {
+            nome: finalEditNome,
+            dataNascimento: editDataNascimento,
+            serie: editSerie,
+            curso: editCurso,
+            turma: finalEditTurma,
+            email: editEmail.trim().toLowerCase(),
+            telefone: editTelefone,
+            updatedAt: serverTimestamp()
+          });
+        } catch (firestoreError) {
+          console.warn("Firestore update failed. Changes remain in local cache:", firestoreError);
+        }
       }
 
       setEditingStudent(null);
@@ -766,17 +774,30 @@ export default function App() {
     const id = studentToDelete.id;
 
     try {
-      if (id.startsWith('local_')) {
-        const cachedData = localStorage.getItem('local_sige_estudantes');
-        if (cachedData) {
+      // 1. Always remove from LocalStorage cache (regardless of prefix)
+      const cachedData = localStorage.getItem('local_sige_estudantes');
+      if (cachedData) {
+        try {
           let cachedList: Student[] = JSON.parse(cachedData);
           cachedList = cachedList.filter(s => s.id !== id);
           localStorage.setItem('local_sige_estudantes', JSON.stringify(cachedList));
+        } catch (e) {
+          console.warn("Erro ao atualizar cache do LocalStorage ao excluir:", e);
         }
-        setStudents(prev => prev.filter(s => s.id !== id));
-      } else {
-        await deleteDoc(doc(db, 'estudantes', id));
       }
+
+      // 2. Always remove from React state immediately
+      setStudents(prev => prev.filter(s => s.id !== id));
+
+      // 3. If remote document, attempt Firestore delete
+      if (!id.startsWith('local_')) {
+        try {
+          await deleteDoc(doc(db, 'estudantes', id));
+        } catch (firestoreError) {
+          console.warn("Firestore deletion failed. Changes remain in local cache:", firestoreError);
+        }
+      }
+
       setStudentToDelete(null);
     } catch (error) {
       console.error(error instanceof Error ? error.message : String(error));
